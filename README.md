@@ -8,7 +8,7 @@ This README provides instructions for setting up and using the utility.
 #### Prerequisites:
 - Python installed on your machine.
 - Microsoft Azure AD tenant with necessary permissions to access SharePoint resources. 
-- Registered Azure AD application with appropriate API permissions. (App-only permission)
+- Registered Azure AD application with appropriate API permissions. (Delegated permission)
 
 #### Installation:
 1. Clone or download the repository containing the utility code.
