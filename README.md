@@ -1,5 +1,8 @@
 ### SharePoint GraphQL 
 
+### Project on PyPI
+https://pypi.org/project/sharepoint-graphql/
+
 #### Overview:
 This Python utility enables users to interact with SharePoint sites via Microsoft Graph API, facilitating tasks such as listing, downloading, uploading, moving, and deleting files.
 The motivation behind creating this repository stems from the absence of a SharePoint GraphQL interface in the existing Office365 Python library client (Office365-REST-Python-Client)
@@ -11,8 +14,11 @@ This README provides instructions for setting up and using the utility.
 - Registered Azure AD application with appropriate API permissions. (Delegated permission)
 
 #### Installation:
-1. Clone or download the repository containing the utility code.
-2. Navigate to the project directory in your terminal or command prompt.
+1. Use pip
+```shell
+pip install sharepoint-graphql
+```
+
 
 #### Configuration:
 1. Update the following variables with your Azure AD and SharePoint details:
