@@ -27,7 +27,11 @@ class SharePointGraphql:
 
         # Rebuild the URL in Graph API format
         site_url = f"{parts[2]}:/{parts[3]}/{parts[4]}:/"
-        self.access_token = token['access_token']
+        try:
+            self.access_token = token['access_token']
+        except KeyError:
+            print("Error: Access token not found, please check your credentials")
+            return None
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
         self.site_url = site_url
@@ -40,6 +44,9 @@ class SharePointGraphql:
         doc_res = json.loads(requests.get(url, headers=headers).text)
         res = json.loads(requests.get(url, headers=headers).text)
 
+        if 'error' in res:
+            print(f"Error: {res['error']['message']}")
+            return None
         self.documents_id = res['id']
 
 
