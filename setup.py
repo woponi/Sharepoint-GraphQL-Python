@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='sharepoint_graphql',
-    version='0.1.5', #Remember to update version
+    version='0.1.5', #Remember to update version test
     description='This Python utility enables users to interact with SharePoint sites via Microsoft Graph API, facilitating tasks such as listing, downloading, uploading, moving, and deleting files.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
