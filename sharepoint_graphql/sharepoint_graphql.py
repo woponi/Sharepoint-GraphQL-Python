@@ -50,9 +50,9 @@ class SharePointGraphql:
         self.documents_id = res['id']
 
 
-    def list_files(self, folder_path):
+    def list_files(self, folder_path, next_link=None, files=[]):
         """
-        Lists files within a specific folder on the SharePoint site.
+        Lists files within a specific folder on the SharePoint site. (Max 5000 files)
 
         Args:
             folder_path: The server-relative path of the folder (e.g., "/sites/your-site/Shared Documents/subfolder").
@@ -65,11 +65,22 @@ class SharePointGraphql:
         url = f"{GRAPH_URL}drives/{self.documents_id}/root:/{folder_path}:/children"
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
+        if len(files) > 5000:
+            raise Exception("Too many files (Try to create subfolder)")
+
         try:
+            if next_link is not None:
+                #Replace url with next link
+                url = next_link
             response = requests.get(url, headers=headers)
             response.raise_for_status()  # Raise exception for non-200 status codes
             data = response.json()
-            return data.get("value", [])  # Extract "value" array containing files
+            files += data.get("value", [])
+            if '@odata.nextLink' in data:
+                next_link = data['@odata.nextLink']
+                return self.list_files(folder_path=folder_path, next_link=next_link, files=files)
+
+            return files  # Extract "value" array containing files
         except requests.exceptions.RequestException as e:
             print(f"Error listing files: {e}")
             return []
