@@ -186,7 +186,11 @@ class SharePointGraphql:
             remote_path: The file path of the file to delete. (Relative path start after Documents)
 
         Returns:
-            True if delete file successful, False otherwise.
+            dict: A dictionary containing the result:
+                - success (bool): True if deletion was successful, False otherwise
+                - error_code (int): HTTP status code if deletion failed, None if successful
+                - error_details (dict): Detailed error information if deletion failed, None if successful
+                - file_metadata (dict): File metadata if available, None if not available
         """
 
         url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_path}"
@@ -197,10 +201,132 @@ class SharePointGraphql:
             response = requests.delete(url, headers=headers, stream=True)
             response.raise_for_status()
 
-            return True
+            return {
+                'success': True,
+                'error_code': None,
+                'error_details': None,
+                'file_metadata': None
+            }
+        except requests.exceptions.HTTPError as e:
+            # Get detailed error information
+            error_details = {
+                'error': str(e),
+                'status_code': e.response.status_code,
+                'file_path': remote_path
+            }
+            
+            # Try to get file metadata for additional context
+            file_metadata = None
+            try:
+                metadata = self.get_file_metadata_by_relative_path(remote_path)
+                if metadata:
+                    file_metadata = {
+                        'name': metadata.get('name'),
+                        'size': metadata.get('size'),
+                        'created_by': metadata.get('createdBy', {}).get('user', {}).get('displayName'),
+                        'last_modified_by': metadata.get('lastModifiedBy', {}).get('user', {}).get('displayName'),
+                        'created_date': metadata.get('createdDateTime'),
+                        'modified_date': metadata.get('lastModifiedDateTime'),
+                        'web_url': metadata.get('webUrl'),
+                        'file_type': metadata.get('file', {}).get('mimeType'),
+                        'parent_folder': metadata.get('parentReference', {}).get('name')
+                    }
+            except Exception as metadata_error:
+                error_details['metadata_error'] = str(metadata_error)
+            
+            # Provide specific error messages based on status code
+            if e.response.status_code == 423:
+                error_details['error_type'] = 'File Locked'
+                error_details['message'] = 'File is currently locked and cannot be deleted. This could be due to:'
+                error_details['possible_causes'] = [
+                    'File is being edited by another user',
+                    'File is checked out',
+                    'File has active sharing permissions',
+                    'File is in a protected library or folder'
+                ]
+            elif e.response.status_code == 403:
+                error_details['error_type'] = 'Permission Denied'
+                error_details['message'] = 'You do not have permission to delete this file. This could be due to:'
+                error_details['possible_causes'] = [
+                    'Insufficient permissions on the file',
+                    'File is in a protected folder',
+                    'File has special permissions',
+                    'Your account lacks delete permissions'
+                ]
+            elif e.response.status_code == 404:
+                error_details['error_type'] = 'File Not Found'
+                error_details['message'] = 'The specified file does not exist or cannot be found.'
+            elif e.response.status_code == 409:
+                error_details['error_type'] = 'Conflict'
+                error_details['message'] = 'There is a conflict preventing file deletion. This could be due to:'
+                error_details['possible_causes'] = [
+                    'File is being synchronized',
+                    'File has pending changes',
+                    'File is in a state that prevents deletion'
+                ]
+            else:
+                error_details['error_type'] = 'Unknown Error'
+                error_details['message'] = f'Unexpected error occurred (Status: {e.response.status_code})'
+            
+            return {
+                'success': False,
+                'error_code': e.response.status_code,
+                'error_details': error_details,
+                'file_metadata': file_metadata
+            }
         except (requests.exceptions.RequestException, KeyError, OSError) as e:
-            print(f"Error deleteing file: {e}")
-            return False
+            return {
+                'success': False,
+                'error_code': None,
+                'error_details': {
+                    'error': str(e),
+                    'error_type': 'Request Exception',
+                    'message': 'An unexpected error occurred during the delete operation.',
+                    'file_path': remote_path
+                },
+                'file_metadata': None
+            }
+
+    def get_file_metadata_by_relative_path(self, remote_path):
+        """
+        Retrieve metadata for a file by its relative path from the SharePoint site.
+
+        Args:
+            remote_path: The file path of the file to get metadata for. (Relative path start after Documents)
+
+        Returns:
+            dict: A dictionary containing the file metadata including properties like:
+                - id: File ID
+                - name: File name
+                - size: File size in bytes
+                - createdDateTime: Creation timestamp
+                - lastModifiedDateTime: Last modified timestamp
+                - webUrl: Web URL to access the file
+                - downloadUrl: Direct download URL
+                - @microsoft.graph.downloadUrl: Microsoft Graph download URL
+                - file: File-specific properties (for files)
+                - folder: Folder-specific properties (for folders)
+                - parentReference: Parent folder information
+                - createdBy: Information about who created the file
+                - lastModifiedBy: Information about who last modified the file
+            None if the file doesn't exist or an error occurs.
+        """
+
+        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_path}"
+
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+            return data
+        except requests.exceptions.RequestException as e:
+            print(f"Error retrieving file metadata: {e}")
+            return None
+
+
 
     def download_file(self, url, output_path):
         """
