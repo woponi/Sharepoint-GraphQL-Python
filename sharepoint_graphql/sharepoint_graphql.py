@@ -138,16 +138,21 @@ class SharePointGraphql:
             print(f"Error Uploading file: {e}")
             return False
 
-    def move_file(self, remote_src_path, remote_des_path):
+    def move_file(self, remote_src_path, remote_des_path, replace=False):
         """
         Move a file by its source path to the destination from the SharePoint site.
 
         Args:
             remote_src_path: The remote file path of the source file
             remote_des_path: The remote file path of the destination file
+            replace: Whether to replace the destination file if it already exists (default: False)
 
         Returns:
-            True if move file successful, False otherwise.
+            dict: A dictionary containing the result:
+                - success (bool): True if move was successful, False otherwise
+                - error_code (int): HTTP status code if move failed, None if successful
+                - error_details (dict): Detailed error information if move failed, None if successful
+                - file_metadata (dict): File metadata if available, None if not available
         """
 
         new_filename = os.path.basename(remote_des_path)
@@ -168,15 +173,113 @@ class SharePointGraphql:
             "name": new_filename
         }
 
+        # Add replace parameter if specified
+        if replace:
+            payload["@microsoft.graph.conflictBehavior"] = "replace"
+
         try:
             response = requests.patch(url, headers=headers, stream=True, json=payload)
             response.raise_for_status()
             data = response.json()
 
-            return True
-        except (requests.exceptions.RequestException, KeyError) as e:
-            print(f"Error downloading file: {e}")
-            return None
+            return {
+                'success': True,
+                'error_code': None,
+                'error_details': None,
+                'file_metadata': None
+            }
+        except requests.exceptions.HTTPError as e:
+            # Get detailed error information
+            error_details = {
+                'error': str(e),
+                'status_code': e.response.status_code,
+                'source_path': remote_src_path,
+                'destination_path': remote_des_path
+            }
+            
+            # Try to get file metadata for additional context
+            file_metadata = None
+            try:
+                metadata = self.get_file_metadata_by_relative_path(remote_src_path)
+                if metadata:
+                    file_metadata = {
+                        'name': metadata.get('name'),
+                        'size': metadata.get('size'),
+                        'created_by': metadata.get('createdBy', {}).get('user', {}).get('displayName'),
+                        'last_modified_by': metadata.get('lastModifiedBy', {}).get('user', {}).get('displayName'),
+                        'created_date': metadata.get('createdDateTime'),
+                        'modified_date': metadata.get('lastModifiedDateTime'),
+                        'web_url': metadata.get('webUrl'),
+                        'file_type': metadata.get('file', {}).get('mimeType'),
+                        'parent_folder': metadata.get('parentReference', {}).get('name')
+                    }
+            except Exception as metadata_error:
+                error_details['metadata_error'] = str(metadata_error)
+            
+            # Provide specific error messages based on status code
+            if e.response.status_code == 409:
+                error_details['error_type'] = 'Conflict'
+                error_details['message'] = 'A file with the same name already exists at the destination. This could be due to:'
+                error_details['possible_causes'] = [
+                    'Destination file already exists and replace=False',
+                    'File is being synchronized',
+                    'File has pending changes',
+                    'Destination folder has conflicting permissions'
+                ]
+                error_details['suggestion'] = 'Set replace=True to overwrite the existing file'
+            elif e.response.status_code == 423:
+                error_details['error_type'] = 'File Locked'
+                error_details['message'] = 'File is currently locked and cannot be moved. This could be due to:'
+                error_details['possible_causes'] = [
+                    'File is being edited by another user',
+                    'File is checked out',
+                    'File has active sharing permissions',
+                    'File is in a protected library or folder'
+                ]
+            elif e.response.status_code == 403:
+                error_details['error_type'] = 'Permission Denied'
+                error_details['message'] = 'You do not have permission to move this file. This could be due to:'
+                error_details['possible_causes'] = [
+                    'Insufficient permissions on the source file',
+                    'Insufficient permissions on the destination folder',
+                    'File is in a protected folder',
+                    'Your account lacks move permissions'
+                ]
+            elif e.response.status_code == 404:
+                error_details['error_type'] = 'File Not Found'
+                error_details['message'] = 'The specified source file does not exist or cannot be found.'
+            elif e.response.status_code == 400:
+                error_details['error_type'] = 'Bad Request'
+                error_details['message'] = 'Invalid request parameters. This could be due to:'
+                error_details['possible_causes'] = [
+                    'Invalid file path format',
+                    'Invalid destination path',
+                    'Source and destination are the same',
+                    'Invalid file name characters'
+                ]
+            else:
+                error_details['error_type'] = 'Unknown Error'
+                error_details['message'] = f'Unexpected error occurred (Status: {e.response.status_code})'
+            
+            return {
+                'success': False,
+                'error_code': e.response.status_code,
+                'error_details': error_details,
+                'file_metadata': file_metadata
+            }
+        except (requests.exceptions.RequestException, KeyError, OSError) as e:
+            return {
+                'success': False,
+                'error_code': None,
+                'error_details': {
+                    'error': str(e),
+                    'error_type': 'Request Exception',
+                    'message': 'An unexpected error occurred during the move operation.',
+                    'source_path': remote_src_path,
+                    'destination_path': remote_des_path
+                },
+                'file_metadata': None
+            }
 
     def delete_file_by_relative_path(self, remote_path):
         """

@@ -34,7 +34,7 @@ pip install sharepoint-graphql
    - `list_files(folder_path)`: List files within a specific folder.
    - `download_file_by_relative_path(remote_path, local_path)`: Download a file by its relative path.
    - `upload_file_by_relative_path(remote_path, local_path)`: Upload a file by its relative path.
-   - `move_file(remote_src_path, remote_des_path)`: Move a file from source to destination.
+   - `move_file(remote_src_path, remote_des_path, replace=False)`: Move a file from source to destination with optional overwrite.
    - `delete_file_by_relative_path(remote_path)`: Delete a file by its relative path with enhanced error handling.
    - `get_file_metadata_by_relative_path(remote_path)`: Retrieve comprehensive metadata for a file.
 
@@ -54,8 +54,20 @@ sp_graphql.download_file_by_relative_path("/Shared Documents/Folder/file.txt", "
 # Upload a file
 sp_graphql.upload_file_by_relative_path("/Shared Documents/Folder/file.txt", "local_path/file.txt")
 
-# Move a file
-sp_graphql.move_file("/Shared Documents/Folder/file.txt", "/Shared Documents/NewFolder/file.txt")
+# Move a file with enhanced error handling
+result = sp_graphql.move_file("/Shared Documents/Folder/file.txt", "/Shared Documents/NewFolder/file.txt")
+if result['success']:
+    print("File moved successfully!")
+else:
+    print(f"Move failed: {result['error_details']['error_type']}")
+    print(f"Error code: {result['error_code']}")
+
+# Move with replace (overwrite existing files)
+result = sp_graphql.move_file("/Shared Documents/Folder/file.txt", "/Shared Documents/NewFolder/file.txt", replace=True)
+if result['success']:
+    print("File moved and replaced successfully!")
+else:
+    print(f"Move failed: {result['error_details']['error_type']}")
 
 # Delete a file with enhanced error handling
 result = sp_graphql.delete_file_by_relative_path("/Shared Documents/Folder/file.txt")
@@ -77,7 +89,7 @@ if metadata:
 
 #### Enhanced Error Handling
 
-The `delete_file_by_relative_path()` method now returns a comprehensive result dictionary instead of a simple boolean:
+The `delete_file_by_relative_path()` and `move_file()` methods now return a comprehensive result dictionary instead of a simple boolean:
 
 ```python
 result = sp_graphql.delete_file_by_relative_path("/path/to/file.xlsx")
@@ -96,6 +108,7 @@ result = sp_graphql.delete_file_by_relative_path("/path/to/file.xlsx")
 - **403 (Forbidden)**: Insufficient permissions to delete the file
 - **404 (Not Found)**: File does not exist or cannot be found
 - **409 (Conflict)**: File operation conflict (e.g., during synchronization)
+- **409 (Conflict)**: File already exists at destination (move operations only)
 
 ##### Error Handling Example:
 ```python
@@ -117,6 +130,31 @@ else:
     elif error_code == 404:
         print("❓ File not found")
         print("Suggestion: Verify the file path")
+    else:
+        print(f"❌ Unexpected error: {error_details['error_type']}")
+```
+
+##### Move File Error Handling:
+```python
+result = sp_graphql.move_file("/source/file.txt", "/destination/file.txt", replace=False)
+
+if result['success']:
+    print("✅ File moved successfully!")
+else:
+    error_code = result['error_code']
+    error_details = result['error_details']
+    
+    if error_code == 409:
+        print("⚠️ File already exists at destination")
+        print("💡 Suggestion: Use replace=True to overwrite")
+    elif error_code == 423:
+        print("🔒 File is locked - try again later")
+    elif error_code == 403:
+        print("🚫 Permission denied - check your access rights")
+    elif error_code == 404:
+        print("❓ Source file not found")
+    elif error_code == 400:
+        print("❌ Invalid request parameters")
     else:
         print(f"❌ Unexpected error: {error_details['error_type']}")
 ```
