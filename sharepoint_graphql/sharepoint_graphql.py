@@ -2,6 +2,7 @@ import requests
 import msal
 import json
 import os
+from urllib.parse import quote
 
 GRAPH_URL = 'https://graph.microsoft.com/v1.0/'
 class SharePointGraphql:
@@ -48,6 +49,34 @@ class SharePointGraphql:
             print(f"Error: {res['error']['message']}")
             return None
         self.documents_id = res['id']
+
+
+    def _encode_file_path(self, file_path):
+        """
+        Helper method to encode file path for Graph API requests.
+        Encodes only the filename part while preserving the directory structure.
+        
+        Args:
+            file_path: The file path to encode
+            
+        Returns:
+            Encoded file path with filename properly URL-encoded
+        """
+        if not file_path:
+            return file_path
+            
+        # Split the path into directory and filename
+        directory = os.path.dirname(file_path)
+        filename = os.path.basename(file_path)
+        
+        # Encode only the filename
+        encoded_filename = quote(filename)
+        
+        # Reconstruct the path
+        if directory:
+            return f"{directory}/{encoded_filename}"
+        else:
+            return encoded_filename
 
 
     def list_files(self, folder_path, next_link=None, files=[]):
@@ -97,7 +126,9 @@ class SharePointGraphql:
             True if download file successful, False otherwise.
         """
 
-        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_path}"
+        # Encode the remote path for Graph API
+        encoded_remote_path = self._encode_file_path(remote_path)
+        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{encoded_remote_path}"
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
@@ -123,7 +154,9 @@ class SharePointGraphql:
             True if upload file successful, False otherwise.
         """
 
-        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_path}:/content"
+        # Encode the remote path for Graph API
+        encoded_remote_path = self._encode_file_path(remote_path)
+        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{encoded_remote_path}:/content"
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
@@ -161,7 +194,9 @@ class SharePointGraphql:
         # Construct the path reference
         path_reference = f"drives/{self.documents_id}/root:/{path}"
 
-        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_src_path}"
+        # Encode the source path for Graph API
+        encoded_remote_src_path = self._encode_file_path(remote_src_path)
+        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{encoded_remote_src_path}"
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
@@ -296,7 +331,9 @@ class SharePointGraphql:
                 - file_metadata (dict): File metadata if available, None if not available
         """
 
-        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_path}"
+        # Encode the remote path for Graph API
+        encoded_remote_path = self._encode_file_path(remote_path)
+        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{encoded_remote_path}"
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
@@ -415,7 +452,9 @@ class SharePointGraphql:
             None if the file doesn't exist or an error occurs.
         """
 
-        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{remote_path}"
+        # Encode the remote path for Graph API
+        encoded_remote_path = self._encode_file_path(remote_path)
+        url = f"{GRAPH_URL}/sites/{self.site_id}/drive/root:/{encoded_remote_path}"
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
